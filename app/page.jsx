@@ -103,14 +103,19 @@ function useHotelState(pax, riyalRate) {
 export default function Page() {
   const [pax, setPax] = useState("1");
   const [riyalRate, setRiyalRate] = useState("75");
+  const [visaPrice, setVisaPrice] = useState("");
 
   const makkah = useHotelState(pax, riyalRate);
   const madinah = useHotelState(pax, riyalRate);
 
-  const grandTotalSAR = makkah.calc.totalReceivableSAR + madinah.calc.totalReceivableSAR;
-  const grandTotalPKR = makkah.calc.totalReceivablePKR + madinah.calc.totalReceivablePKR;
-  const grandPerPersonSAR = makkah.calc.totalPerPersonSAR + madinah.calc.totalPerPersonSAR;
-  const grandPerPersonPKR = grandPerPersonSAR * toNumber(riyalRate);
+  const visaPricePerPerson = toNumber(visaPrice);
+  const paxCount = toNumber(pax);
+  const rate = toNumber(riyalRate);
+
+  const grandPerPersonSAR = makkah.calc.totalPerPersonSAR + madinah.calc.totalPerPersonSAR + visaPricePerPerson;
+  const grandTotalSAR = makkah.calc.totalReceivableSAR + madinah.calc.totalReceivableSAR + visaPricePerPerson * paxCount;
+  const grandPerPersonPKR = grandPerPersonSAR * rate;
+  const grandTotalPKR = grandTotalSAR * rate;
 
   return (
     <div className="min-h-screen bg-neutral-50 text-neutral-900 p-4 sm:p-8">
@@ -146,6 +151,18 @@ export default function Page() {
               className="w-full rounded-lg border border-neutral-200 px-3 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-400"
             />
           </div>
+          <div className="w-48">
+            <label className="block text-sm font-medium text-neutral-700 mb-1.5">Visa price per person (SAR)</label>
+            <input
+              type="number"
+              inputMode="decimal"
+              value={visaPrice}
+              onChange={(e) => setVisaPrice(e.target.value)}
+              placeholder="0.00"
+              className="w-full rounded-lg border border-neutral-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-400"
+            />
+            <p className="text-xs text-neutral-400 mt-1">added to per-person and total cost</p>
+          </div>
         </div>
 
         {/* Two hotel panels side by side */}
@@ -158,7 +175,7 @@ export default function Page() {
         <div className="bg-neutral-900 text-white rounded-xl p-6 flex flex-wrap gap-8 items-center justify-between">
           <div>
             <p className="text-xs uppercase tracking-wide text-neutral-400 mb-1">
-              Grand total receivable from customer (Makkah + Madinah)
+              Grand total receivable from customer (Makkah + Madinah + Visa)
             </p>
             <p className="text-3xl font-semibold">SAR {formatMoney(grandTotalSAR)}</p>
           </div>
