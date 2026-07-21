@@ -16,7 +16,7 @@ function nextId() {
 }
 
 function makeSegment() {
-  return { id: nextId(), startDate: "", endDate: "", roomPrice: "" };
+  return { id: nextId(), startDate: "", endDate: "", roomPrice: "", costPrice: "" };
 }
 
 const SEGMENT_COLORS = [
@@ -47,7 +47,8 @@ function nightsBetween(startDate, endDate) {
 }
 
 // Per-hotel state: room type + one shared discount pair, and a list of date-range
-// segments that only carry their own dates and room price.
+// segments that carry their own dates, room price, and your cost price (what the
+// supplier charges you) so profit can be tracked alongside the customer rate.
 function useHotelState(pax, riyalRate) {
   const [roomType, setRoomType] = useState("DOUBLE");
   const [roomDiscount, setRoomDiscount] = useState("");
@@ -70,17 +71,35 @@ function useHotelState(pax, riyalRate) {
 
     const segmentResults = segments.map((seg) => {
       const price = toNumber(seg.roomPrice);
+      const cost = toNumber(seg.costPrice);
       const nights = nightsBetween(seg.startDate, seg.endDate);
 
       const base = isSharing ? price : price / divisor;
+      const costBase = isSharing ? cost : cost / divisor;
       const roomDiscPerPerson = isSharing ? rDisc : rDisc / divisor;
       const afterRoomDiscount = base - roomDiscPerPerson;
       const perNight = afterRoomDiscount - aDisc;
+      const profitPerNight = perNight - costBase;
 
       const totalPerPersonSAR = perNight * nights;
       const receivableSAR = totalPerPersonSAR * p;
 
-      return { id: seg.id, nights, base, roomDiscPerPerson, afterRoomDiscount, perNight, totalPerPersonSAR, receivableSAR };
+      const totalProfitPerPersonSAR = profitPerNight * nights;
+      const profitSAR = totalProfitPerPersonSAR * p;
+
+      return {
+        id: seg.id,
+        nights,
+        base,
+        roomDiscPerPerson,
+        afterRoomDiscount,
+        perNight,
+        totalPerPersonSAR,
+        receivableSAR,
+        costBase,
+        profitPerNight,
+        profitSAR,
+      };
     });
 
     const totalNights = segmentResults.reduce((sum, r) => sum + r.nights, 0);
@@ -88,7 +107,18 @@ function useHotelState(pax, riyalRate) {
     const totalReceivableSAR = segmentResults.reduce((sum, r) => sum + r.receivableSAR, 0);
     const totalReceivablePKR = totalReceivableSAR * rate;
 
-    return { segmentResults, totalNights, totalPerPersonSAR, totalReceivableSAR, totalReceivablePKR };
+    const totalProfitSAR = segmentResults.reduce((sum, r) => sum + r.profitSAR, 0);
+    const totalProfitPKR = totalProfitSAR * rate;
+
+    return {
+      segmentResults,
+      totalNights,
+      totalPerPersonSAR,
+      totalReceivableSAR,
+      totalReceivablePKR,
+      totalProfitSAR,
+      totalProfitPKR,
+    };
   }, [segments, roomDiscount, agentDiscount, pax, riyalRate, isSharing, divisor]);
 
   return {
@@ -104,6 +134,7 @@ export default function Page() {
   const [pax, setPax] = useState("1");
   const [riyalRate, setRiyalRate] = useState("75");
   const [visaPrice, setVisaPrice] = useState("");
+  const [ticketPrice, setTicketPrice] = useState("");
 
   const makkah = useHotelState(pax, riyalRate);
   const madinah = useHotelState(pax, riyalRate);
@@ -112,10 +143,25 @@ export default function Page() {
   const paxCount = toNumber(pax);
   const rate = toNumber(riyalRate);
 
-  const grandPerPersonSAR = makkah.calc.totalPerPersonSAR + madinah.calc.totalPerPersonSAR + visaPricePerPerson;
-  const grandTotalSAR = makkah.calc.totalReceivableSAR + madinah.calc.totalReceivableSAR + visaPricePerPerson * paxCount;
+  // Ticket price is entered in PKR directly, then converted to SAR using the
+  // riyal rate so it can be combined with everything else.
+  const ticketPricePerPersonPKR = toNumber(ticketPrice);
+  const ticketPricePerPersonSAR = rate > 0 ? ticketPricePerPersonPKR / rate : 0;
+
+  const grandPerPersonSAR =
+    makkah.calc.totalPerPersonSAR + madinah.calc.totalPerPersonSAR + visaPricePerPerson + ticketPricePerPersonSAR;
+  const grandTotalSAR =
+    makkah.calc.totalReceivableSAR +
+    madinah.calc.totalReceivableSAR +
+    (visaPricePerPerson + ticketPricePerPersonSAR) * paxCount;
   const grandPerPersonPKR = grandPerPersonSAR * rate;
   const grandTotalPKR = grandTotalSAR * rate;
+
+  // Profit is only tracked on room rates (Makkah + Madinah cost price vs room price).
+  // Visa and ticket are passed through as-is with no cost entry, so they aren't
+  // included here.
+  const grandProfitSAR = makkah.calc.totalProfitSAR + madinah.calc.totalProfitSAR;
+  const grandProfitPKR = grandProfitSAR * rate;
 
   return (
     <div className="min-h-screen bg-neutral-50 text-neutral-900 p-4 sm:p-8">
@@ -163,6 +209,18 @@ export default function Page() {
             />
             <p className="text-xs text-neutral-400 mt-1">added to per-person and total cost</p>
           </div>
+          <div className="w-48">
+            <label className="block text-sm font-medium text-neutral-700 mb-1.5">Ticket price per person (PKR)</label>
+            <input
+              type="number"
+              inputMode="decimal"
+              value={ticketPrice}
+              onChange={(e) => setTicketPrice(e.target.value)}
+              placeholder="0.00"
+              className="w-full rounded-lg border border-neutral-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-400"
+            />
+            <p className="text-xs text-neutral-400 mt-1">converted to SAR using riyal rate, then added to total</p>
+          </div>
         </div>
 
         {/* Two hotel panels side by side */}
@@ -175,7 +233,7 @@ export default function Page() {
         <div className="bg-neutral-900 text-white rounded-xl p-6 flex flex-wrap gap-8 items-center justify-between">
           <div>
             <p className="text-xs uppercase tracking-wide text-neutral-400 mb-1">
-              Grand total receivable from customer (Makkah + Madinah + Visa)
+              Grand total receivable from customer (Makkah + Madinah + Visa + Ticket, ticket entered in PKR)
             </p>
             <p className="text-3xl font-semibold">SAR {formatMoney(grandTotalSAR)}</p>
           </div>
@@ -189,6 +247,11 @@ export default function Page() {
             <p className="text-sm text-neutral-400">Rs {formatMoney(grandPerPersonPKR)}</p>
           </div>
         </div>
+
+        {/* Private profit summary — small font, tucked at the very bottom */}
+        <p className="text-[11px] text-neutral-400 text-right mt-2">
+          Your profit (room rate only): SAR {formatMoney(grandProfitSAR)} · Rs {formatMoney(grandProfitPKR)}
+        </p>
       </div>
     </div>
   );
@@ -257,7 +320,7 @@ function HotelPanel({ name, state, pax }) {
                 )}
               </div>
 
-              <div className="grid grid-cols-3 gap-3 mb-3">
+              <div className="grid grid-cols-2 gap-3 mb-3">
                 <div>
                   <label className="block text-sm font-medium text-neutral-700 mb-1.5">Start date</label>
                   <input
@@ -276,11 +339,21 @@ function HotelPanel({ name, state, pax }) {
                     className="w-full rounded-lg border border-neutral-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-400"
                   />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mb-3">
                 <Field
                   label="Room price (SAR)"
                   value={seg.roomPrice}
                   onChange={(v) => state.updateSegment(seg.id, "roomPrice", v)}
                   placeholder="0.00"
+                />
+                <Field
+                  label="My cost price (SAR)"
+                  value={seg.costPrice}
+                  onChange={(v) => state.updateSegment(seg.id, "costPrice", v)}
+                  placeholder="0.00"
+                  hint="what supplier charges you"
                 />
               </div>
 
@@ -291,7 +364,7 @@ function HotelPanel({ name, state, pax }) {
                 </span>
               </p>
 
-              {/* Segment breakdown */}
+              {/* Segment breakdown (customer-facing numbers only) */}
               <div className="pt-3 border-t border-neutral-100">
                 <div className="space-y-1.5 text-sm">
                   <Row label={state.isSharing ? "Room price" : `Room price ÷ ${state.divisor}`} value={result.base} />
@@ -333,6 +406,24 @@ function HotelPanel({ name, state, pax }) {
           {toNumber(pax) || 0} pax × {state.calc.totalNights} total night{state.calc.totalNights === 1 ? "" : "s"}
           {state.segments.length > 1 ? ` across ${state.segments.length} date ranges` : ""}
         </p>
+      </div>
+
+      {/* Profit — kept in its own box, separate from the customer-facing breakdown above */}
+      <div className="mt-3 bg-emerald-50 border border-emerald-100 rounded-lg p-4">
+        <p className="text-xs uppercase tracking-wide text-emerald-700/70 mb-1">{name} profit</p>
+        <p className="text-lg font-semibold text-emerald-800">SAR {formatMoney(state.calc.totalProfitSAR)}</p>
+        <p className="text-sm text-emerald-700/80">Rs {formatMoney(state.calc.totalProfitPKR)}</p>
+        <div className="mt-2 space-y-0.5">
+          {state.segments.map((seg, i) => {
+            const result = state.calc.segmentResults[i];
+            return (
+              <p key={seg.id} className="text-[11px] text-emerald-700/70">
+                {state.segments.length > 1 ? `Range ${i + 1}: ` : ""}
+                profit/night SAR {formatMoney(result.profitPerNight)} per person
+              </p>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
