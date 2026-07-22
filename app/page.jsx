@@ -343,13 +343,13 @@ function HotelPanel({ name, state, pax }) {
 
               <div className="grid grid-cols-2 gap-3 mb-3">
                 <Field
-                  label="Room price (SAR)"
+                  label="Sale price (SAR)"
                   value={seg.roomPrice}
                   onChange={(v) => state.updateSegment(seg.id, "roomPrice", v)}
                   placeholder="0.00"
                 />
                 <Field
-                  label="My cost price (SAR)"
+                  label="Cost price (SAR)"
                   value={seg.costPrice}
                   onChange={(v) => state.updateSegment(seg.id, "costPrice", v)}
                   placeholder="0.00"
