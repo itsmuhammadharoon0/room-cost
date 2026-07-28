@@ -16,7 +16,7 @@ function nextId() {
 }
 
 function makeSegment() {
-  return { id: nextId(), startDate: "", endDate: "", roomPrice: "", costPrice: "" };
+  return { id: nextId(), hotelName: "", startDate: "", endDate: "", roomPrice: "", costPrice: "" };
 }
 
 const SEGMENT_COLORS = [
@@ -203,7 +203,8 @@ export default function Page() {
     const lines = [];
     validSegments.forEach((seg) => {
       const segNights = nightsBetween(seg.startDate, seg.endDate);
-      lines.push(`${label} Hotel: ${segNights} nights`);
+      const suffix = seg.hotelName ? ` (${seg.hotelName})` : "";
+      lines.push(`${label} Hotel${suffix}: ${segNights} nights`);
       lines.push(`  ${formatShortDate(seg.startDate)} to ${formatShortDate(seg.endDate)}`);
     });
     return lines;
@@ -216,13 +217,17 @@ export default function Page() {
     lines.push(`${totalTripDays} Days Umrah Package`);
     lines.push("");
     lines.push(...buildHotelLines("Makkah", makkah));
+    lines.push("");
     lines.push(...buildHotelLines("Madina", madinah));
     lines.push("");
     lines.push(`Package: ${formatWhole(perPersonWithoutTicketPKR)}/-`);
     if (ticketPricePerPersonPKR > 0) {
+      lines.push(`Ticket: ${formatWhole(ticketPricePerPersonPKR)}/-`);
       lines.push(`Package (with Ticket): ${formatWhole(perPersonWithTicketPKR)}/-`);
+    } else {
+      lines.push("Rate is without Ticket");
     }
-    lines.push("Payable by Customer (Per person)");
+    lines.push("Payable by Customer (Per Person)");
     lines.push(`Room Type: ${roomLine}`);
     return lines.join("\n");
   }
@@ -407,7 +412,15 @@ function HotelPanel({ name, state, pax }) {
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-3 mb-3">
+              <Field
+                label="Hotel name"
+                type="text"
+                value={seg.hotelName}
+                onChange={(v) => state.updateSegment(seg.id, "hotelName", v)}
+                placeholder={`e.g. ${name} Towers`}
+              />
+
+              <div className="grid grid-cols-2 gap-3 mb-3 mt-3">
                 <div>
                   <label className="block text-sm font-medium text-neutral-700 mb-1.5">Start date</label>
                   <input
@@ -516,13 +529,13 @@ function HotelPanel({ name, state, pax }) {
   );
 }
 
-function Field({ label, value, onChange, placeholder, hint }) {
+function Field({ label, value, onChange, placeholder, hint, type = "number" }) {
   return (
     <div>
       <label className="block text-sm font-medium text-neutral-700 mb-1.5">{label}</label>
       <input
-        type="number"
-        inputMode="decimal"
+        type={type}
+        inputMode={type === "number" ? "decimal" : undefined}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
