@@ -195,21 +195,35 @@ export default function Page() {
   const perPersonWithoutTicketPKR = perPersonWithoutTicketSAR * rate;
   const perPersonWithTicketPKR = perPersonWithoutTicketPKR + ticketPricePerPersonPKR;
 
+  function buildHotelLines(label, state) {
+    const validSegments = state.segments.filter((seg) => seg.startDate && seg.endDate);
+    if (validSegments.length === 0) {
+      return [`${label} Hotel: 0 nights`];
+    }
+    const lines = [];
+    validSegments.forEach((seg) => {
+      const segNights = nightsBetween(seg.startDate, seg.endDate);
+      lines.push(`${label} Hotel: ${segNights} nights`);
+      lines.push(`  ${formatShortDate(seg.startDate)} to ${formatShortDate(seg.endDate)}`);
+    });
+    return lines;
+  }
+
   function buildSummary() {
     const lines = [];
+    const shortDate = formatShortDate(departureDate);
+    if (shortDate) lines.push(`${shortDate} Departure`);
     lines.push(`${totalTripDays} Days Umrah Package`);
-    lines.push(`Makkah Hotel: ${makkah.calc.totalNights} nights`);
-    lines.push(`Madina Hotel: ${madinah.calc.totalNights} nights`);
+    lines.push("");
+    lines.push(...buildHotelLines("Makkah", makkah));
+    lines.push(...buildHotelLines("Madina", madinah));
     lines.push("");
     lines.push(`Package: ${formatWhole(perPersonWithoutTicketPKR)}/-`);
     if (ticketPricePerPersonPKR > 0) {
       lines.push(`Package (with Ticket): ${formatWhole(perPersonWithTicketPKR)}/-`);
     }
     lines.push("Payable by Customer (Per person)");
-    lines.push("Room Type: ", roomLine);
-    if (ticketPricePerPersonPKR > 0) lines.push("With Ticket");
-    const shortDate = formatShortDate(departureDate);
-    if (shortDate) lines.push(`${shortDate} Departure`);
+    lines.push(`Room Type: ${roomLine}`);
     return lines.join("\n");
   }
 
