@@ -36,6 +36,10 @@ function formatMoney(n) {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function formatWhole(n) {
+  return Math.round(n).toLocaleString();
+}
+
 function nightsBetween(startDate, endDate) {
   if (!startDate || !endDate) return 0;
   const start = new Date(startDate);
@@ -44,6 +48,13 @@ function nightsBetween(startDate, endDate) {
   end.setHours(0, 0, 0, 0);
   const diffDays = Math.round((end - start) / (1000 * 60 * 60 * 24));
   return diffDays > 0 ? diffDays : 0;
+}
+
+function formatShortDate(dateStr) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
 // Per-hotel state: room type + one shared discount pair, and a list of date-range
@@ -136,6 +147,8 @@ export default function Page() {
   const [visaPrice, setVisaPrice] = useState("");
   const [ticketPrice, setTicketPrice] = useState("");
 
+  const [copied, setCopied] = useState(false);
+
   const makkah = useHotelState(pax, riyalRate);
   const madinah = useHotelState(pax, riyalRate);
 
@@ -162,6 +175,55 @@ export default function Page() {
   // included here.
   const grandProfitSAR = makkah.calc.totalProfitSAR + madinah.calc.totalProfitSAR;
   const grandProfitPKR = grandProfitSAR * rate;
+
+  const makkahRoomLabel = ROOM_TYPES.find((r) => r.key === makkah.roomType)?.label ?? "";
+  const madinahRoomLabel = ROOM_TYPES.find((r) => r.key === madinah.roomType)?.label ?? "";
+  const roomLine =
+    makkahRoomLabel === madinahRoomLabel
+      ? `${makkahRoomLabel} Room`
+      : `Makkah: ${makkahRoomLabel} Room · Madinah: ${madinahRoomLabel} Room`;
+
+  // Departure date = check-in date of the first Makkah date range (first hotel checked into).
+  const departureDate = makkah.segments[0]?.startDate ?? "";
+
+  // Total package days = total nights across both hotels + 1.
+  const totalTripNights = makkah.calc.totalNights + madinah.calc.totalNights;
+  const totalTripDays = totalTripNights > 0 ? totalTripNights + 1 : 0;
+
+  // Package price without ticket (hotels + visa only) vs with ticket added on top.
+  const perPersonWithoutTicketSAR = makkah.calc.totalPerPersonSAR + madinah.calc.totalPerPersonSAR + visaPricePerPerson;
+  const perPersonWithoutTicketPKR = perPersonWithoutTicketSAR * rate;
+  const perPersonWithTicketPKR = perPersonWithoutTicketPKR + ticketPricePerPersonPKR;
+
+  function buildSummary() {
+    const lines = [];
+    lines.push(`${totalTripDays} Days Umrah Package`);
+    lines.push(`Makkah Hotel: ${makkah.calc.totalNights} nights`);
+    lines.push(`Madina Hotel: ${madinah.calc.totalNights} nights`);
+    lines.push("");
+    lines.push(`Package: ${formatWhole(perPersonWithoutTicketPKR)}/-`);
+    if (ticketPricePerPersonPKR > 0) {
+      lines.push(`Package (with Ticket): ${formatWhole(perPersonWithTicketPKR)}/-`);
+    }
+    lines.push("Payable by Customer (Per person)");
+    lines.push("Room Type");
+    lines.push(roomLine);
+    if (ticketPricePerPersonPKR > 0) lines.push("With Ticket");
+    const shortDate = formatShortDate(departureDate);
+    if (shortDate) lines.push(`${shortDate} Departure`);
+    return lines.join("\n");
+  }
+
+  async function handleCopy() {
+    const text = buildSummary();
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch (err) {
+      console.error("Copy failed", err);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-neutral-50 text-neutral-900 p-4 sm:p-8">
@@ -246,7 +308,19 @@ export default function Page() {
             <p className="text-xl font-semibold">SAR {formatMoney(grandPerPersonSAR)}</p>
             <p className="text-sm text-neutral-400">Rs {formatMoney(grandPerPersonPKR)}</p>
           </div>
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="rounded-lg bg-white text-neutral-900 px-4 py-2.5 text-sm font-medium hover:bg-neutral-100 transition-colors"
+          >
+            {copied ? "Copied!" : "Copy summary"}
+          </button>
         </div>
+
+        {/* Live preview of what gets copied */}
+        <pre className="mt-3 bg-white border border-neutral-200 rounded-lg p-4 text-sm text-neutral-700 whitespace-pre-wrap">
+          {buildSummary()}
+        </pre>
 
         {/* Private profit summary — small font, tucked at the very bottom */}
         <p className="text-[11px] text-neutral-400 text-right mt-2">
