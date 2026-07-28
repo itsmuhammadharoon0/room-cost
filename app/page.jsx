@@ -206,8 +206,7 @@ export default function Page() {
       lines.push(`Package (with Ticket): ${formatWhole(perPersonWithTicketPKR)}/-`);
     }
     lines.push("Payable by Customer (Per person)");
-    lines.push("Room Type");
-    lines.push(roomLine);
+    lines.push("Room Type: ", roomLine);
     if (ticketPricePerPersonPKR > 0) lines.push("With Ticket");
     const shortDate = formatShortDate(departureDate);
     if (shortDate) lines.push(`${shortDate} Departure`);
