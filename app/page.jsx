@@ -223,8 +223,7 @@ export default function Page() {
     });
     return lines;
   }
- 
-  
+
   function buildSummary() {
     const lines = [];
     const shortDate = formatShortDate(departureDate);
@@ -248,26 +247,18 @@ export default function Page() {
     return lines.join("\n");
   }
 
+  // Computed fresh every render (cheap, pure). Comparing this string itself
+  // (not object references buried inside it) is what makes the effect below
+  // reliably catch every change — hotel name, dates, prices, discounts, etc.
+  const generatedSummary = buildSummary();
+
   // Keep the editable box in sync with the calculated summary until the user
   // starts editing it themselves.
   useEffect(() => {
     if (!summaryEdited) {
-      setSummaryText(buildSummary());
+      setSummaryText(generatedSummary);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    makkah.calc,
-    madinah.calc,
-    pax,
-    riyalRate,
-    visaPrice,
-    ticketPrice,
-    departureDate,
-    totalTripDays,
-    perPersonWithoutTicketPKR,
-    perPersonWithTicketPKR,
-    roomLine,
-  ]);
+  }, [generatedSummary, summaryEdited]);
 
   async function handleCopy() {
     const text = summaryText;
