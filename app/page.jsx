@@ -212,6 +212,7 @@ export default function Page() {
 
   function buildSummary() {
     const lines = [];
+    lines.push(`Total PAX: ${paxCount || 0}`);
     const shortDate = formatShortDate(departureDate);
     if (shortDate) lines.push(`${shortDate} Departure`);
     lines.push(`${totalTripDays} Days Umrah Package`);
