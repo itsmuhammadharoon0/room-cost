@@ -223,7 +223,8 @@ export default function Page() {
     });
     return lines;
   }
-
+ 
+  
   function buildSummary() {
     const lines = [];
     const shortDate = formatShortDate(departureDate);
