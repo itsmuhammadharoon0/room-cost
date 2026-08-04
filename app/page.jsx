@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 
 const ROOM_TYPES = [
   { key: "SHARING", label: "Sharing", divisor: 1 },
@@ -149,6 +149,11 @@ export default function Page() {
 
   const [copied, setCopied] = useState(false);
 
+  // Editable summary box: mirrors the auto-generated text until the user types
+  // in it directly, at which point it stops auto-refreshing so edits stick.
+  const [summaryText, setSummaryText] = useState("");
+  const [summaryEdited, setSummaryEdited] = useState(false);
+
   const makkah = useHotelState(pax, riyalRate);
   const madinah = useHotelState(pax, riyalRate);
 
@@ -242,8 +247,29 @@ export default function Page() {
     return lines.join("\n");
   }
 
+  // Keep the editable box in sync with the calculated summary until the user
+  // starts editing it themselves.
+  useEffect(() => {
+    if (!summaryEdited) {
+      setSummaryText(buildSummary());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    makkah.calc,
+    madinah.calc,
+    pax,
+    riyalRate,
+    visaPrice,
+    ticketPrice,
+    departureDate,
+    totalTripDays,
+    perPersonWithoutTicketPKR,
+    perPersonWithTicketPKR,
+    roomLine,
+  ]);
+
   async function handleCopy() {
-    const text = buildSummary();
+    const text = summaryText;
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
@@ -362,12 +388,34 @@ export default function Page() {
           </button>
         </div>
 
-        {/* Live preview of what gets copied */}
-        <pre className="mt-3 bg-white border border-neutral-200 rounded-lg p-4 text-sm text-neutral-700 whitespace-pre-wrap">
-          {buildSummary()}
-        </pre>
-
-        
+        {/* Editable preview of what gets copied */}
+        <div className="mt-3">
+          <div className="flex items-center justify-between mb-1.5">
+            <p className="text-xs text-neutral-400">
+              {summaryEdited
+                ? "Edited — won't auto-update from the fields above"
+                : "Auto-generated from the fields above · tap to edit"}
+            </p>
+            {summaryEdited && (
+              <button
+                type="button"
+                onClick={() => setSummaryEdited(false)}
+                className="text-xs text-neutral-500 hover:text-neutral-800 underline"
+              >
+                Reset to generated
+              </button>
+            )}
+          </div>
+          <textarea
+            value={summaryText}
+            onChange={(e) => {
+              setSummaryText(e.target.value);
+              setSummaryEdited(true);
+            }}
+            rows={14}
+            className="w-full bg-white border border-neutral-200 rounded-lg p-4 text-sm text-neutral-700 whitespace-pre-wrap focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-400 font-mono"
+          />
+        </div>
       </div>
     </div>
   );
