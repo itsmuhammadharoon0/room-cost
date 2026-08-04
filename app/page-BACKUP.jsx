@@ -195,15 +195,6 @@ export default function Page() {
   const perPersonWithoutTicketPKR = perPersonWithoutTicketSAR * rate;
   const perPersonWithTicketPKR = perPersonWithoutTicketPKR + ticketPricePerPersonPKR;
 
-  // Validation: every segment (in both hotels) needs a sale price and cost price
-  // filled in before we consider the numbers trustworthy.
-  function segmentHasErrors(seg) {
-    return seg.roomPrice === "" || seg.costPrice === "";
-  }
-  const makkahHasErrors = makkah.segments.some(segmentHasErrors);
-  const madinahHasErrors = madinah.segments.some(segmentHasErrors);
-  const hasAnyErrors = makkahHasErrors || madinahHasErrors;
-
   function buildHotelLines(label, state) {
     const validSegments = state.segments.filter((seg) => seg.startDate && seg.endDate);
     if (validSegments.length === 0) {
@@ -224,7 +215,6 @@ export default function Page() {
     const shortDate = formatShortDate(departureDate);
     if (shortDate) lines.push(`${shortDate} Departure`);
     lines.push(`${totalTripDays} Days Umrah Package`);
-    lines.push(`Number of Persons: ${paxCount || 0}`);
     lines.push(`Room Type: ${roomLine}`);
     lines.push("");
     lines.push(...buildHotelLines("Makkah", makkah));
@@ -324,12 +314,6 @@ export default function Page() {
           <HotelPanel name="Madinah" state={madinah} pax={pax} />
         </div>
 
-        {hasAnyErrors && (
-          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            Some sale price / cost price fields are empty — totals below are incomplete until they're filled in.
-          </div>
-        )}
-
         {/* Grand total */}
         <div className="bg-neutral-900 text-white rounded-xl p-6 flex flex-wrap gap-8 items-center justify-between">
           <div>
@@ -350,13 +334,7 @@ export default function Page() {
           <button
             type="button"
             onClick={handleCopy}
-            disabled={hasAnyErrors}
-            className={`rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${
-              hasAnyErrors
-                ? "bg-neutral-700 text-neutral-400 cursor-not-allowed"
-                : "bg-white text-neutral-900 hover:bg-neutral-100"
-            }`}
-            title={hasAnyErrors ? "Fill in all sale/cost prices before copying" : undefined}
+            className="rounded-lg bg-white text-neutral-900 px-4 py-2.5 text-sm font-medium hover:bg-neutral-100 transition-colors"
           >
             {copied ? "Copied!" : "Copy summary"}
           </button>
@@ -418,8 +396,6 @@ function HotelPanel({ name, state, pax }) {
         {state.segments.map((seg, i) => {
           const result = state.calc.segmentResults[i];
           const color = SEGMENT_COLORS[i % SEGMENT_COLORS.length];
-          const priceError = seg.roomPrice === "" ? "Sale price is required" : null;
-          const costError = seg.costPrice === "" ? "Cost price is required" : null;
           return (
             <div key={seg.id} className={`rounded-lg border border-neutral-200 border-l-4 ${color.border} p-4`}>
               <div className="flex items-center justify-between mb-3">
@@ -473,7 +449,6 @@ function HotelPanel({ name, state, pax }) {
                   value={seg.roomPrice}
                   onChange={(v) => state.updateSegment(seg.id, "roomPrice", v)}
                   placeholder="0.00"
-                  error={priceError}
                 />
                 <Field
                   label="Cost price (SAR)"
@@ -481,7 +456,6 @@ function HotelPanel({ name, state, pax }) {
                   onChange={(v) => state.updateSegment(seg.id, "costPrice", v)}
                   placeholder="0.00"
                   hint="what supplier charges you"
-                  error={costError}
                 />
               </div>
 
@@ -557,7 +531,7 @@ function HotelPanel({ name, state, pax }) {
   );
 }
 
-function Field({ label, value, onChange, placeholder, hint, type = "number", error }) {
+function Field({ label, value, onChange, placeholder, hint, type = "number" }) {
   return (
     <div>
       <label className="block text-sm font-medium text-neutral-700 mb-1.5">{label}</label>
@@ -567,17 +541,9 @@ function Field({ label, value, onChange, placeholder, hint, type = "number", err
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className={`w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 ${
-          error
-            ? "border-red-300 focus:ring-red-500/10 focus:border-red-400"
-            : "border-neutral-200 focus:ring-neutral-900/10 focus:border-neutral-400"
-        }`}
+        className="w-full rounded-lg border border-neutral-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-400"
       />
-      {error ? (
-        <p className="text-xs text-red-500 mt-1">{error}</p>
-      ) : (
-        hint && <p className="text-xs text-neutral-400 mt-1">{hint}</p>
-      )}
+      {hint && <p className="text-xs text-neutral-400 mt-1">{hint}</p>}
     </div>
   );
 }
