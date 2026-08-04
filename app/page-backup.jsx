@@ -57,14 +57,6 @@ function formatShortDate(dateStr) {
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
-// A segment counts as "missing prices" only once it's actually in use (has a
-// hotel name or dates entered) — a freshly-added blank segment shouldn't nag.
-function segmentIsMissingPrices(seg) {
-  const active = Boolean(seg.hotelName || seg.startDate || seg.endDate || seg.roomPrice || seg.costPrice);
-  if (!active) return false;
-  return seg.roomPrice === "" || seg.costPrice === "";
-}
-
 // Per-hotel state: room type + one shared discount pair, and a list of date-range
 // segments that carry their own dates, room price, and your cost price (what the
 // supplier charges you) so profit can be tracked alongside the customer rate.
@@ -140,15 +132,12 @@ function useHotelState(pax, riyalRate) {
     };
   }, [segments, roomDiscount, agentDiscount, pax, riyalRate, isSharing, divisor]);
 
-  const missingPriceCount = segments.filter(segmentIsMissingPrices).length;
-
   return {
     roomType, setRoomType,
     roomDiscount, setRoomDiscount,
     agentDiscount, setAgentDiscount,
     segments, addSegment, removeSegment, updateSegment,
     divisor, isSharing, calc,
-    missingPriceCount,
   };
 }
 
@@ -206,12 +195,6 @@ export default function Page() {
   const perPersonWithoutTicketPKR = perPersonWithoutTicketSAR * rate;
   const perPersonWithTicketPKR = perPersonWithoutTicketPKR + ticketPricePerPersonPKR;
 
-  // Required-field validation: sale price + cost price on every active segment,
-  // plus the visa price. Used to flag inputs and block copying an incomplete summary.
-  const visaMissing = visaPrice === "";
-  const totalMissingCount = makkah.missingPriceCount + madinah.missingPriceCount + (visaMissing ? 1 : 0);
-  const hasMissingPrices = totalMissingCount > 0;
-
   function buildHotelLines(label, state) {
     const validSegments = state.segments.filter((seg) => seg.startDate && seg.endDate);
     if (validSegments.length === 0) {
@@ -251,7 +234,6 @@ export default function Page() {
   }
 
   async function handleCopy() {
-    if (hasMissingPrices) return;
     const text = buildSummary();
     try {
       await navigator.clipboard.writeText(text);
@@ -302,14 +284,16 @@ export default function Page() {
             />
           </div>
           <div className="w-48">
-            <Field
-              label="Visa price per person (SAR)"
+            <label className="block text-sm font-medium text-neutral-700 mb-1.5">Visa price per person (SAR)</label>
+            <input
+              type="number"
+              inputMode="decimal"
               value={visaPrice}
-              onChange={setVisaPrice}
+              onChange={(e) => setVisaPrice(e.target.value)}
               placeholder="0.00"
-              hint="added to per-person and total cost"
-              required
+              className="w-full rounded-lg border border-neutral-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-400"
             />
+            <p className="text-xs text-neutral-400 mt-1">added to per-person and total cost</p>
           </div>
           <div className="w-48">
             <label className="block text-sm font-medium text-neutral-700 mb-1.5">Ticket price per person (PKR)</label>
@@ -348,26 +332,13 @@ export default function Page() {
             <p className="text-xl font-semibold">SAR {formatMoney(grandPerPersonSAR)}</p>
             <p className="text-sm text-neutral-400">Rs {formatMoney(grandPerPersonPKR)}</p>
           </div>
-          <div className="flex flex-col items-end gap-1.5">
-            <button
-              type="button"
-              onClick={handleCopy}
-              disabled={hasMissingPrices}
-              title={hasMissingPrices ? "Fill in every Sale price, Cost price and the Visa price first" : undefined}
-              className={`rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${
-                hasMissingPrices
-                  ? "bg-neutral-700 text-neutral-400 cursor-not-allowed"
-                  : "bg-white text-neutral-900 hover:bg-neutral-100"
-              }`}
-            >
-              {copied ? "Copied!" : "Copy summary"}
-            </button>
-            {hasMissingPrices && (
-              <p className="text-xs text-red-300">
-                {totalMissingCount} price{totalMissingCount === 1 ? "" : "s"} missing
-              </p>
-            )}
-          </div>
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="rounded-lg bg-white text-neutral-900 px-4 py-2.5 text-sm font-medium hover:bg-neutral-100 transition-colors"
+          >
+            {copied ? "Copied!" : "Copy summary"}
+          </button>
         </div>
 
         {/* Live preview of what gets copied */}
@@ -479,7 +450,6 @@ function HotelPanel({ name, state, pax }) {
                   value={seg.roomPrice}
                   onChange={(v) => state.updateSegment(seg.id, "roomPrice", v)}
                   placeholder="0.00"
-                  required
                 />
                 <Field
                   label="Cost price (SAR)"
@@ -487,7 +457,6 @@ function HotelPanel({ name, state, pax }) {
                   onChange={(v) => state.updateSegment(seg.id, "costPrice", v)}
                   placeholder="0.00"
                   hint="what supplier charges you"
-                  required
                 />
               </div>
 
@@ -540,11 +509,6 @@ function HotelPanel({ name, state, pax }) {
           {toNumber(pax) || 0} pax × {state.calc.totalNights} total night{state.calc.totalNights === 1 ? "" : "s"}
           {state.segments.length > 1 ? ` across ${state.segments.length} date ranges` : ""}
         </p>
-        {state.missingPriceCount > 0 && (
-          <p className="text-xs text-red-500 mt-2">
-            {state.missingPriceCount} price{state.missingPriceCount === 1 ? "" : "s"} missing in {name}
-          </p>
-        )}
       </div>
 
       {/* Profit — kept in its own box, separate from the customer-facing breakdown above */}
@@ -568,32 +532,19 @@ function HotelPanel({ name, state, pax }) {
   );
 }
 
-function Field({ label, value, onChange, placeholder, hint, type = "number", required = false }) {
-  const isMissing = required && value === "";
+function Field({ label, value, onChange, placeholder, hint, type = "number" }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-neutral-700 mb-1.5">
-        {label}
-        {required && <span className="text-red-500 ml-0.5">*</span>}
-      </label>
+      <label className="block text-sm font-medium text-neutral-700 mb-1.5">{label}</label>
       <input
         type={type}
         inputMode={type === "number" ? "decimal" : undefined}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        aria-invalid={isMissing || undefined}
-        className={`w-full rounded-lg border px-3 py-2.5 text-sm focus:outline-none focus:ring-2 ${
-          isMissing
-            ? "border-red-300 focus:ring-red-100 focus:border-red-400"
-            : "border-neutral-200 focus:ring-neutral-900/10 focus:border-neutral-400"
-        }`}
+        className="w-full rounded-lg border border-neutral-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-400"
       />
-      {isMissing ? (
-        <p className="text-xs text-red-500 mt-1">Required</p>
-      ) : (
-        hint && <p className="text-xs text-neutral-400 mt-1">{hint}</p>
-      )}
+      {hint && <p className="text-xs text-neutral-400 mt-1">{hint}</p>}
     </div>
   );
 }
