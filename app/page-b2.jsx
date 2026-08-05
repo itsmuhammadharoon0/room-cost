@@ -67,8 +67,7 @@ function segmentIsMissingPrices(seg) {
 
 // Per-hotel state: room type + one shared discount pair, and a list of date-range
 // segments that carry their own dates, room price, and your cost price (what the
-// supplier charges you) so profit and total cost can be tracked alongside the
-// customer-facing rate.
+// supplier charges you) so profit can be tracked alongside the customer rate.
 function useHotelState(pax, riyalRate) {
   const [roomType, setRoomType] = useState("DOUBLE");
   const [roomDiscount, setRoomDiscount] = useState("");
@@ -107,11 +106,6 @@ function useHotelState(pax, riyalRate) {
       const totalProfitPerPersonSAR = profitPerNight * nights;
       const profitSAR = totalProfitPerPersonSAR * p;
 
-      // Cost = Cost price (SAR) × nights (same divisor treatment as sale price,
-      // no discounts subtracted).
-      const totalCostPerPersonSAR = costBase * nights;
-      const costSAR = totalCostPerPersonSAR * p;
-
       return {
         id: seg.id,
         nights,
@@ -124,8 +118,6 @@ function useHotelState(pax, riyalRate) {
         costBase,
         profitPerNight,
         profitSAR,
-        totalCostPerPersonSAR,
-        costSAR,
       };
     });
 
@@ -137,11 +129,6 @@ function useHotelState(pax, riyalRate) {
     const totalProfitSAR = segmentResults.reduce((sum, r) => sum + r.profitSAR, 0);
     const totalProfitPKR = totalProfitSAR * rate;
 
-    const totalCostPerPersonSAR = segmentResults.reduce((sum, r) => sum + r.totalCostPerPersonSAR, 0);
-    const totalCostSAR = segmentResults.reduce((sum, r) => sum + r.costSAR, 0);
-    const totalCostPerPersonPKR = totalCostPerPersonSAR * rate;
-    const totalCostPKR = totalCostSAR * rate;
-
     return {
       segmentResults,
       totalNights,
@@ -150,10 +137,6 @@ function useHotelState(pax, riyalRate) {
       totalReceivablePKR,
       totalProfitSAR,
       totalProfitPKR,
-      totalCostPerPersonSAR,
-      totalCostSAR,
-      totalCostPerPersonPKR,
-      totalCostPKR,
     };
   }, [segments, roomDiscount, agentDiscount, pax, riyalRate, isSharing, divisor]);
 
@@ -176,7 +159,6 @@ export default function Page() {
   const [ticketPrice, setTicketPrice] = useState("");
 
   const [copied, setCopied] = useState(false);
-  const [showCost, setShowCost] = useState(false);
 
   const makkah = useHotelState(pax, riyalRate);
   const madinah = useHotelState(pax, riyalRate);
@@ -204,16 +186,6 @@ export default function Page() {
   // included here.
   const grandProfitSAR = makkah.calc.totalProfitSAR + madinah.calc.totalProfitSAR;
   const grandProfitPKR = grandProfitSAR * rate;
-
-  // Total cost (what the supplier charges you) — same room-only scope as profit
-  // above, plus the visa price (visa is a pass-through cost, not a discountable
-  // room rate). Shown separately per person and as a grand total. Hidden behind
-  // a toggle since it's private/internal data, not customer-facing.
-  const grandCostPerPersonSAR =
-    makkah.calc.totalCostPerPersonSAR + madinah.calc.totalCostPerPersonSAR + visaPricePerPerson;
-  const grandCostSAR = makkah.calc.totalCostSAR + madinah.calc.totalCostSAR + visaPricePerPerson * paxCount;
-  const grandCostPerPersonPKR = grandCostPerPersonSAR * rate;
-  const grandCostPKR = grandCostSAR * rate;
 
   const makkahRoomLabel = ROOM_TYPES.find((r) => r.key === makkah.roomType)?.label ?? "";
   const madinahRoomLabel = ROOM_TYPES.find((r) => r.key === madinah.roomType)?.label ?? "";
@@ -360,95 +332,42 @@ export default function Page() {
         </div>
 
         {/* Grand total */}
-        <div className="bg-neutral-900 text-white rounded-xl p-6">
-          <div className="flex flex-wrap gap-8 items-center justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-neutral-400 mb-1">
-                Grand total receivable from customer (Makkah + Madinah + Visa + Ticket, ticket entered in PKR)
-              </p>
-              <p className="text-3xl font-semibold">SAR {formatMoney(grandTotalSAR)}</p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-neutral-400 mb-1">In PKR</p>
-              <p className="text-3xl font-semibold">Rs {formatMoney(grandTotalPKR)}</p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-neutral-400 mb-1">Cost per person</p>
-              <p className="text-xl font-semibold">SAR {formatMoney(grandPerPersonSAR)}</p>
-              <p className="text-sm text-neutral-400">Rs {formatMoney(grandPerPersonPKR)}</p>
-            </div>
-
-            {/* Right side: toggle to reveal supplier cost (private, not customer-facing) */}
-            <div className="flex flex-col items-end gap-3">
-              <button
-                type="button"
-                onClick={() => setShowCost((v) => !v)}
-                aria-pressed={showCost}
-                className="flex items-center gap-2 text-sm text-neutral-300 hover:text-white transition-colors"
-              >
-                <span>Show cost</span>
-                <span
-                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                    showCost ? "bg-emerald-500" : "bg-neutral-700"
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
-                      showCost ? "translate-x-4.5" : "translate-x-1"
-                    }`}
-                    style={{ transform: showCost ? "translateX(18px)" : "translateX(4px)" }}
-                  />
-                </span>
-              </button>
-
-              <div className="flex flex-col items-end gap-1.5">
-                <button
-                  type="button"
-                  onClick={handleCopy}
-                  disabled={hasMissingPrices}
-                  title={hasMissingPrices ? "Fill in every Sale price, Cost price and the Visa price first" : undefined}
-                  className={`rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${
-                    hasMissingPrices
-                      ? "bg-neutral-700 text-neutral-400 cursor-not-allowed"
-                      : "bg-white text-neutral-900 hover:bg-neutral-100"
-                  }`}
-                >
-                  {copied ? "Copied!" : "Copy summary"}
-                </button>
-                {hasMissingPrices && (
-                  <p className="text-xs text-red-300">
-                    {totalMissingCount} price{totalMissingCount === 1 ? "" : "s"} missing
-                  </p>
-                )}
-              </div>
-            </div>
+        <div className="bg-neutral-900 text-white rounded-xl p-6 flex flex-wrap gap-8 items-center justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-neutral-400 mb-1">
+              Grand total receivable from customer (Makkah + Madinah + Visa + Ticket, ticket entered in PKR)
+            </p>
+            <p className="text-3xl font-semibold">SAR {formatMoney(grandTotalSAR)}</p>
           </div>
-
-          {/* Total cost breakdown — only visible when toggled on */}
-          {showCost && (
-            <div className="mt-5 pt-5 border-t border-neutral-700">
-              <p className="text-[11px] text-neutral-500 mb-3">
-                Cost = (Cost price (SAR) × nights, per hotel date range) + Visa price
+          <div>
+            <p className="text-xs uppercase tracking-wide text-neutral-400 mb-1">In PKR</p>
+            <p className="text-3xl font-semibold">Rs {formatMoney(grandTotalPKR)}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wide text-neutral-400 mb-1">Cost per person</p>
+            <p className="text-xl font-semibold">SAR {formatMoney(grandPerPersonSAR)}</p>
+            <p className="text-sm text-neutral-400">Rs {formatMoney(grandPerPersonPKR)}</p>
+          </div>
+          <div className="flex flex-col items-end gap-1.5">
+            <button
+              type="button"
+              onClick={handleCopy}
+              disabled={hasMissingPrices}
+              title={hasMissingPrices ? "Fill in every Sale price, Cost price and the Visa price first" : undefined}
+              className={`rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${
+                hasMissingPrices
+                  ? "bg-neutral-700 text-neutral-400 cursor-not-allowed"
+                  : "bg-white text-neutral-900 hover:bg-neutral-100"
+              }`}
+            >
+              {copied ? "Copied!" : "Copy summary"}
+            </button>
+            {hasMissingPrices && (
+              <p className="text-xs text-red-300">
+                {totalMissingCount} price{totalMissingCount === 1 ? "" : "s"} missing
               </p>
-              <div className="flex flex-wrap gap-8">
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-emerald-400/80 mb-1">Cost per person</p>
-                  <p className="text-xl font-semibold text-emerald-300">SAR {formatMoney(grandCostPerPersonSAR)}</p>
-                  <p className="text-sm text-emerald-400/70">Rs {formatMoney(grandCostPerPersonPKR)}</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-emerald-400/80 mb-1">Total cost</p>
-                  <p className="text-xl font-semibold text-emerald-300">SAR {formatMoney(grandCostSAR)}</p>
-                  <p className="text-sm text-emerald-400/70">Rs {formatMoney(grandCostPKR)}</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-emerald-400/80 mb-1">Profit</p>
-                  <p className="text-xl font-semibold text-emerald-300">SAR {formatMoney(grandProfitSAR)}</p>
-                  <p className="text-sm text-emerald-400/70">Rs {formatMoney(grandProfitPKR)}</p>
-                </div>
-              </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Live preview of what gets copied */}
