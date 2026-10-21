@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const ROOM_TYPES = [
   { key: "SHARING", label: "Sharing", divisor: 1 },
@@ -17,6 +17,34 @@ function nextId() {
 
 function makeSegment() {
   return { id: nextId(), hotelName: "", startDate: "", endDate: "", roomPrice: "", costPrice: "" };
+}
+
+// ---- Saved values (browser localStorage) ----
+const STORAGE_PREFIX = "room-calculator-v1:";
+
+function loadSaved(key) {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_PREFIX + key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeSaved(key, value) {
+  try {
+    window.localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(value));
+  } catch {
+    // storage unavailable or full — ignore, the calculator still works
+  }
+}
+
+// Make sure newly created segment ids never collide with ids restored from storage.
+function syncIdCounter(segments) {
+  segments.forEach((seg) => {
+    const n = parseInt(String(seg.id).replace("seg-", ""), 10);
+    if (Number.isFinite(n) && n > idCounter) idCounter = n;
+  });
 }
 
 const SEGMENT_COLORS = [
@@ -69,11 +97,40 @@ function segmentIsMissingPrices(seg) {
 // segments that carry their own dates, room price, and your cost price (what the
 // supplier charges you) so profit and total cost can be tracked alongside the
 // customer-facing rate.
-function useHotelState(pax, riyalRate) {
+function useHotelState(pax, riyalRate, storageKey) {
   const [roomType, setRoomType] = useState("DOUBLE");
   const [roomDiscount, setRoomDiscount] = useState("");
   const [agentDiscount, setAgentDiscount] = useState("");
   const [segments, setSegments] = useState(() => [makeSegment()]);
+  const [loaded, setLoaded] = useState(false);
+
+  // Restore saved values once on first load.
+  useEffect(() => {
+    const saved = loadSaved(storageKey);
+    if (saved) {
+      if (typeof saved.roomType === "string") setRoomType(saved.roomType);
+      if (typeof saved.roomDiscount === "string") setRoomDiscount(saved.roomDiscount);
+      if (typeof saved.agentDiscount === "string") setAgentDiscount(saved.agentDiscount);
+      if (Array.isArray(saved.segments) && saved.segments.length > 0) {
+        syncIdCounter(saved.segments);
+        setSegments(saved.segments);
+      }
+    }
+    setLoaded(true);
+  }, [storageKey]);
+
+  // Save every change (only after the restore above has run).
+  useEffect(() => {
+    if (!loaded) return;
+    writeSaved(storageKey, { roomType, roomDiscount, agentDiscount, segments });
+  }, [loaded, storageKey, roomType, roomDiscount, agentDiscount, segments]);
+
+  const reset = () => {
+    setRoomType("DOUBLE");
+    setRoomDiscount("");
+    setAgentDiscount("");
+    setSegments([makeSegment()]);
+  };
 
   const divisor = ROOM_TYPES.find((r) => r.key === roomType)?.divisor ?? 1;
   const isSharing = roomType === "SHARING";
@@ -168,6 +225,7 @@ function useHotelState(pax, riyalRate) {
     segments, addSegment, removeSegment, updateSegment,
     divisor, isSharing, calc,
     missingPriceCount,
+    reset,
   };
 }
 
@@ -180,8 +238,37 @@ export default function Page() {
   const [copied, setCopied] = useState(false);
   const [showCost, setShowCost] = useState(false);
 
-  const makkah = useHotelState(pax, riyalRate);
-  const madinah = useHotelState(pax, riyalRate);
+  const makkah = useHotelState(pax, riyalRate, "makkah");
+  const madinah = useHotelState(pax, riyalRate, "madinah");
+
+  // Restore the shared inputs (pax, riyal rate, visa, ticket) once on first load.
+  const [sharedLoaded, setSharedLoaded] = useState(false);
+  useEffect(() => {
+    const saved = loadSaved("shared");
+    if (saved) {
+      if (typeof saved.pax === "string") setPax(saved.pax);
+      if (typeof saved.riyalRate === "string") setRiyalRate(saved.riyalRate);
+      if (typeof saved.visaPrice === "string") setVisaPrice(saved.visaPrice);
+      if (typeof saved.ticketPrice === "string") setTicketPrice(saved.ticketPrice);
+    }
+    setSharedLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!sharedLoaded) return;
+    writeSaved("shared", { pax, riyalRate, visaPrice, ticketPrice });
+  }, [sharedLoaded, pax, riyalRate, visaPrice, ticketPrice]);
+
+  // Clear every entered value (and the saved copy) back to the defaults.
+  function handleClearAll() {
+    if (!window.confirm("Clear all entered values? This cannot be undone.")) return;
+    setPax("1");
+    setRiyalRate("75");
+    setVisaPrice("");
+    setTicketPrice("");
+    makkah.reset();
+    madinah.reset();
+  }
 
   const visaPricePerPerson = toNumber(visaPrice);
   const paxCount = toNumber(pax);
@@ -422,6 +509,13 @@ export default function Page() {
                     {totalMissingCount} price{totalMissingCount === 1 ? "" : "s"} missing
                   </p>
                 )}
+                <button
+                  type="button"
+                  onClick={handleClearAll}
+                  className="rounded-lg border border-neutral-600 px-4 py-2 text-sm font-medium text-neutral-300 hover:border-red-400 hover:text-red-300 transition-colors"
+                >
+                  Clear all values
+                </button>
               </div>
             </div>
           </div>
@@ -487,7 +581,7 @@ function HotelPanel({ name, state, pax }) {
         ))}
       </div>
 
-      {/* Shared discounts, applied to every date range below 
+      {/* Shared discounts, applied to every date range below */}
       <div className="grid grid-cols-2 gap-4 mb-5">
         <Field
           label="My Discount(Room_Sharing)"
@@ -504,7 +598,6 @@ function HotelPanel({ name, state, pax }) {
           hint="deducted as-is"
         />
       </div>
-      */}
 
       <div className="space-y-4">
         {state.segments.map((seg, i) => {
