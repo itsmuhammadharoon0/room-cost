@@ -94,7 +94,9 @@ function useHotelState(pax, riyalRate) {
       const cost = toNumber(seg.costPrice);
       const nights = nightsBetween(seg.startDate, seg.endDate);
 
-      const base = isSharing ? price : price / divisor;
+      // Cost is divided by room type, then the margin (sale price - cost price)
+      // is added on top as-is (not divided).
+      const base = isSharing ? price : cost / divisor + (price - cost);
       const costBase = isSharing ? cost : cost / divisor;
       const roomDiscPerPerson = isSharing ? rDisc : rDisc / divisor;
       const afterRoomDiscount = base - roomDiscPerPerson;
