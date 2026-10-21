@@ -487,7 +487,7 @@ function HotelPanel({ name, state, pax }) {
         ))}
       </div>
 
-      {/* Shared discounts, applied to every date range below */}
+      {/* Shared discounts, applied to every date range below 
       <div className="grid grid-cols-2 gap-4 mb-5">
         <Field
           label="My Discount(Room_Sharing)"
@@ -504,6 +504,7 @@ function HotelPanel({ name, state, pax }) {
           hint="deducted as-is"
         />
       </div>
+      */}
 
       <div className="space-y-4">
         {state.segments.map((seg, i) => {
